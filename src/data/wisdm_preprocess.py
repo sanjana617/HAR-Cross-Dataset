@@ -1,7 +1,7 @@
 """WISDM v1.1 -> data/processed/wisdm.npz  (raw g, 20 Hz, 50-sample windows, stride 25).
 Usage: python wisdm_preprocess.py RAW_TXT OUT_NPZ
 """
-import sys, subprocess
+import sys, json, subprocess
 import numpy as np, pandas as pd
 
 G = 9.80665                      # m/s^2 per g (protocol)
@@ -64,7 +64,8 @@ if __name__ == "__main__":
     except Exception: commit = "unknown"
     meta = dict(dataset="WISDM", version="v1.1 (2010)", original_rate_hz=20, placement="pocket",
                 units="g", git_commit=commit)
-    np.savez(out, X=X, y=y, subject_id=sid, meta=np.array(str(meta)))
+    import os; os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    np.savez(out, X=X, y=y, subject_id=sid, meta=np.array(json.dumps(meta)))
     print(f"malformed lines dropped: {bad}; rows removed in cleaning: {dropped}")
     print("X", X.shape, X.dtype, "| users", len(np.unique(sid)))
     print("class counts:", dict(zip(*np.unique(y, return_counts=True))))
