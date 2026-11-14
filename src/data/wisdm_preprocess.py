@@ -2,6 +2,7 @@
 Usage: python wisdm_preprocess.py RAW_TXT OUT_NPZ
 """
 import sys, json, subprocess
+from datetime import datetime
 import numpy as np, pandas as pd
 
 G = 9.80665                      # m/s^2 per g (protocol)
@@ -62,8 +63,15 @@ if __name__ == "__main__":
     X, y, sid = build(df)
     try: commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except Exception: commit = "unknown"
-    meta = dict(dataset="WISDM", version="v1.1 (2010)", original_rate_hz=20, placement="pocket",
-                units="g", git_commit=commit)
+    meta = dict(dataset="WISDM",
+                source_url="http://www.cis.fordham.edu/wisdm/",
+                raw_file_sha256="9aba4b1eaece56ab6d9187b16fc010c176e464750a4ec44c9d833514ecc1fa2e",
+                version="v1.1 (2010)", placement="pocket", units="g",
+                fs_original=20, fs=20, window=WIN, stride=STRIDE, method="interpolate_segments",
+                classes=["walking", "upstairs", "downstairs", "sitting", "standing"],
+                dropped=["jogging"], normalized=False,
+                info=dict(malformed_lines_dropped=bad, rows_removed_in_cleaning=dropped),
+                git_commit=commit, created=datetime.now().isoformat(timespec="seconds"))
     import os; os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     np.savez(out, X=X, y=y, subject_id=sid, meta=np.array(json.dumps(meta)))
     print(f"malformed lines dropped: {bad}; rows removed in cleaning: {dropped}")
