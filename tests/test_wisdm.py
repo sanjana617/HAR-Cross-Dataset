@@ -17,3 +17,8 @@ def test_rest_is_1g():
     assert 0.9 < m < 1.1
 def test_class_table():
     print({int(k): int(v) for k, v in zip(*np.unique(y, return_counts=True))})
+
+def test_meta_is_json():
+    import json
+    m = json.loads(str(d["meta"]))
+    assert m["dataset"] == "WISDM" and m["units"] == "g"
