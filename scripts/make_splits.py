@@ -1,12 +1,5 @@
 
-"""Make fixed subject-wise splits for each HAR dataset.
-
-Run:
-    python scripts/make_splits.py
-    python scripts/make_splits.py --real
-
-Output: splits/{domain}.json
-"""
+"""Make fixed subject-wise splits for each HAR dataset."""
 
 import argparse
 import json
@@ -42,7 +35,7 @@ PAMAP2_SPLITS = [
         "val": [105],
         "test": [102, 108],
     },
-]
+}
 
 
 def get_ids(domain, real):
@@ -51,7 +44,7 @@ def get_ids(domain, real):
             np.load(f"data/processed/{domain}.npz")["subject_id"]
         )
     elif domain == "pamap2_hand":
-        ids = np.array([101, 102, 103, 104, 105, 106, 107, 108])
+        ids = np.arange(101, 109)
     else:
         ids = np.arange(1, sum(SIZES[domain]) + 1)
 
@@ -85,15 +78,20 @@ def make_splits(domain, ids):
 def check(domain, ids, splits):
     assert len(splits) == N_SPLITS
 
-    for split in splits:
-        train = set(split["train"])
-        val = set(split["val"])
-        test = set(split["test"])
+    for s in splits:
+        tr = set(s["train"])
+        va = set(s["val"])
+        te = set(s["test"])
 
-        assert not (train & val)
-        assert not (train & test)
-        assert not (val & test)
-        assert train | val | test == set(ids)
+        assert not (tr & va)
+        assert not (tr & te)
+        assert not (va & te)
+        assert tr | va | te == set(ids)
+
+        if domain != "pamap2_hand":
+            assert (
+                len(tr), len(va), len(te)
+            ) == SIZES[domain]
 
     if domain == "pamap2_hand":
         all_test = [
@@ -102,13 +100,6 @@ def check(domain, ids, splits):
             for subject in split["test"]
         ]
         assert sorted(all_test) == sorted(ids)
-        assert len(all_test) == len(set(all_test))
-    else:
-        n_train, n_val, n_test = SIZES[domain]
-        for split in splits:
-            assert len(split["train"]) == n_train
-            assert len(split["val"]) == n_val
-            assert len(split["test"]) == n_test
 
 
 def main():
@@ -123,14 +114,14 @@ def main():
         splits = make_splits(domain, ids)
         check(domain, ids, splits)
 
-        output = {
+        out = {
             "domain": domain,
             "seed": SEED,
             "splits": splits,
         }
 
-        with open(f"splits/{domain}.json", "w") as file:
-            json.dump(output, file, indent=2)
+        with open(f"splits/{domain}.json", "w") as f:
+            json.dump(out, f, indent=2)
 
         print(f"{domain}: OK ({len(ids)} subjects)")
 
