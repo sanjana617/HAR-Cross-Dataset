@@ -80,3 +80,22 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 2026-11-15 (Shreya): UCI-HAR uses the preferred stitch method (amendment 5), not the fallback. Train 7352 rows chained into 600 segments, test 2947 rows into 257. Windows never cross a gap in the overlap. Output: 8355 windows, 30 subjects. See `docs/data_cards/uci_har.md`.
 
 
+## WISDM pipeline decisions (Shanaya)
+
+- Date: 2026-11-16
+- Release: WISDM v1.1 (2010). 36 users, phone in pocket, about 20 Hz. The 36 users fit the protocol's 25/5/6 split.
+- Dropped: malformed lines (11,734), rows with timestamp 0, duplicate rows (same user, activity, timestamp), and Jogging.
+- Timestamps were sorted within each user and activity. A new segment starts after any gap over 0.5 s.
+- No anti-alias filter: the data is already about 20 Hz, so it is only interpolated onto a uniform 20 Hz grid.
+- Converted to g (divide by 9.80665), not normalized. Code: `src/data/wisdm_preprocess.py`.
+- Reply to the `git_commit: unknown` note above: wisdm.npz was built from a local folder that is not a git repository, so no commit could be recorded. The script that produces it is `src/data/wisdm_preprocess.py`.
+- Owner: Shanaya
+
+## TCN tuning result (Shanaya)
+
+- Date: 2026-11-16
+- UCI-HAR, split 0, seed 0, 4 random configs, max 10 epochs (see D-006).
+- Best config: lr 0.001, dropout 0.5, weight decay 1e-4, kernel 7. Width 39, 76,640 parameters. Validation macro F1 0.9306.
+- The top two trials were nearly tied (0.9305 and 0.9306), so the choice is preliminary.
+- Parameter count sent to Sanjana for the parity check. Against the CNN's 75,335 the ratio is about 1.02.
+- Owner: Shanaya
