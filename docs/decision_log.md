@@ -34,4 +34,32 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 ## D-006: Tuning rule
 - 4 random configs per model
 - Only on UCI-HAR, split 0, seed 0, max 10 epochs
-- Best config is reused for WISDM and PAMAP2-hand
+- Best config is reused for WISDM and PAMAP2-hand 
+# Decision Log
+
+## WISDM Dataset
+
+- Dataset file: `wisdm.npz`
+- SHA-256: `25aa9ab426c0f1f4c662566059321e5a3c5c3d1772c8a4143882c2b65b5c7ac0`
+- Dataset contains 29,553 windows from 36 subjects.
+- Input shape: `(29553, 50, 3)`.
+- Sampling frequency: 20 Hz.
+- Window size: 50 samples.
+- Units: g.
+- Data is not normalized.
+- Preprocessing: interpolation within segments; jogging dropped.
+- All five activity classes are present.
+- Generated `splits/wisdm.json` using seed 0 and real subject IDs.
+- All three splits passed subject-count, disjointness and class-presence checks.
+- Metadata currently records `git_commit: unknown`. Awaiting confirmation from the dataset owner.
+
+## UCI-HAR Dataset
+
+- Dataset contains 8,355 windows from 30 subjects.
+- Input shape: `(8355, 50, 3)`.
+- Sampling frequency: 20 Hz.
+- Window size: 50 samples.
+- Units: g.
+- Data is not normalized.
+- Preprocessing method: continuous signal stitching.
+- Generated `splits/uci.json` using seed 0 and real subject IDs.
