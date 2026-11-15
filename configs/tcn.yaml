@@ -1,0 +1,6 @@
+dropout: 0.5
+kernel_size: 7
+learning_rate: 0.001
+n_params: 76640
+weight_decay: 0.0001
+width: 39
