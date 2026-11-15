@@ -79,6 +79,14 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 
 2026-11-15 (Shreya): UCI-HAR uses the preferred stitch method (amendment 5), not the fallback. Train 7352 rows chained into 600 segments, test 2947 rows into 257. Windows never cross a gap in the overlap. Output: 8355 windows, 30 subjects. See `docs/data_cards/uci_har.md`.
 
+## 2026-11-16 - CNN tuning result (Shreya)
+- Tuning run by Sanjana on Colab (`python -m scripts.tune_cnn_uci`, commit 562f15f8adbb1751b01ffa0ca54bdeb16ff44b4e, on main; splits/uci.json git hash 6524095acb690d56912ecfdd1a492b4a1e0490c8). Protocol settings: 4 unique random configs (seed 0) on UCI-HAR, split 0, max 10 epochs, chosen by source-val macro F1. Results in results/raw/tuning_cnn.csv.
+- Selected: lr 3e-3, dropout 0.3, weight decay 1e-4, kernel 3, 3 blocks, width 90, 75,335 params (val macro F1 0.937). Saved in configs/cnn_best.json. Reused unchanged for WISDM and PAMAP2-hand.
+- Limitation: all 4 drawn configs had weight decay 1e-4 (about 3% chance; Sanjana verified the sampler is correct), so weight decay was not compared for the CNN. We are not rerunning, to keep the protocol's seed-0 draw. Any extra exploration will be a separate, labelled experiment.
+- Limitation: the four scores range from 0.930 to 0.937, a gap of under 0.01. With one seed we cannot tell whether that gap is real, so the config was selected by validation F1, not shown to be better. Trial 1 peaked at epoch 9 of 10, so the 10-epoch cap may have limited it.
+- README tuning numbers (8 configs, 15 epochs) were stale. PROTOCOL.md (4 configs, UCI only, 10 epochs) is the source of truth, and the README now points to it. No protocol change.
+
+2026-11-16 (Shreya): .gitignore line `results/raw/*` was blocking result CSVs. Added `!results/raw/*.csv`, since PROTOCOL.md requires results CSVs in the repo. Other files in results/raw/ remain ignored.
 
 ## WISDM pipeline decisions (Shanaya)
 
