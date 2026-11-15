@@ -1,6 +1,6 @@
 # Data card: PAMAP2-hand
 
-**Status:** draft, 2026-11-15 (Sharanya). Only the subject 109 decision is still [PENDING].
+**Status:** draft, 2026-11-15 (Sharanya). Subject 109 decision recorded under Known limitations.
 
 ## Source
 - PAMAP2 Physical Activity Monitoring, UCI Machine Learning Repository, dataset ID 231.
@@ -53,7 +53,7 @@ Activity 0 (transient) and every other activity are dropped. Mapping source: act
 `python -m pytest -q -s tests/test_pamap2.py`: 16 passed (12 synthetic, 4 on the real file), 2026-11-15.
 
 ## Known limitations
-- Subject 109 has no windows for the 5 classes in Protocol or Optional, so only 8 subjects are usable. The readme explains that hardware problems left some activities of some subjects partly or completely missing. The protocol assumes 9 subjects; team decision [PENDING].
+- Subject 109 has no windows for the 5 classes in Protocol or Optional, so only 8 subjects are usable. The readme explains that hardware problems left some activities of some subjects partly or completely missing. The protocol assumed 9 subjects. Team decision (Option A, 2026-11-16): three disjoint test sets of 3, 3 and 2 subjects that cover all 8 subjects once; train/val/test 4/1/3, 4/1/3 and 5/1/2.
 - The hand IMU's effective rate is 99.63 Hz (readme); the files are on a regular 0.01 s grid with NaN for dropped samples, and the pipeline treats it as 100 Hz.
 - Different parts of one subject's recording are joined during transient (activity 0) stretches (readme). Segments are cut at every activity change and activity 0 is dropped, so no window crosses such a join.
 - One placement only (hand, dominant wrist); accelerometer only.
