@@ -1,0 +1,1 @@
+2026-11-16 (Shreya): CNN merged to main (src/models/cnn.py, tests/test_cnn.py, 9 tests pass). Width solved to about 75k parameters (75,815 for kernel 5 with 3 blocks; all configs 74.9k to 76.2k, see docs/cnn_param_counts.txt). Tuning on UCI is waiting on Sanjana's harness and splits/uci.json.
