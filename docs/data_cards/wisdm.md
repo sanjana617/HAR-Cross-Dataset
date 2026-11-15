@@ -34,4 +34,4 @@ Shapes and dtype, no NaN, labels 0 to 4, user ids 1 to 36. Sitting and standing 
 ## Known issues
 - Strongly imbalanced (Walking is 56% of windows), so macro F1 is the headline metric.
 - Not every user has every class (only 23 users have Sitting, 24 have Standing). Some test users will lack classes.
-- git_commit in meta is “unknown” because the file was built from a local folder that is not a git repository. The script src/data/wisdm_preprocess.py produces it (see D-entry “WISDM pipeline decisions” in docs/DECISIONS.md).
+- git_commit in meta is “unknown” because the file was built from a local folder that is not a git repository. The script src/data/wisdm_preprocess.py produces it (see the entry “WISDM pipeline decisions” in docs/decision_log.md).
