@@ -34,9 +34,20 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 ## D-006: Tuning rule
 - 4 random configs per model
 - Only on UCI-HAR, split 0, seed 0, max 10 epochs
-- Best config is reused for WISDM and PAMAP2-hand 
-# Decision Log
 
+- Dataset contains 8,355 windows from 30 subjects.
+- Input shape: `(8355, 50, 3)`.
+- Sampling frequency: 20 Hz.
+- Window size: 50 samples.
+- Units: g.
+- Data is not normalized.
+- Preprocessing method: continuous signal stitching.
+
+2026-11-15 (Shreya): UCI-HAR uses the preferred stitch method (amendment 5), not the fallback. Train 7352 rows chained into 600 segments, test 2947 rows into 257. Windows never cross a gap in the overlap. Output: 8355 windows, 30 subjects. See `docs/data_cards/uci_har.md`.
+
+- Best config is reused for WISDM and PAMAP2-hand
+
+2026-11-15 (Shreya): UCI-HAR uses the preferred stitch method (amendment 5), not the fallback. Train 7352 rows chained into 600 segments, test 2947 rows into 257. Windows never cross a gap in the overlap. Output: 8355 windows, 30 subjects. See docs/data_cards/uci_har.md.
 
 - Best config is reused for WISDM and PAMAP2-hand
 
@@ -67,3 +78,5 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 - Preprocessing method: continuous signal stitching.
 
 2026-11-15 (Shreya): UCI-HAR uses the preferred stitch method (amendment 5), not the fallback. Train 7352 rows chained into 600 segments, test 2947 rows into 257. Windows never cross a gap in the overlap. Output: 8355 windows, 30 subjects. See `docs/data_cards/uci_har.md`.
+
+
