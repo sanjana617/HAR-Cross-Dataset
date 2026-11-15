@@ -37,6 +37,9 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 - Best config is reused for WISDM and PAMAP2-hand 
 # Decision Log
 
+
+- Best config is reused for WISDM and PAMAP2-hand
+
 ## WISDM Dataset
 
 - Dataset file: `wisdm.npz`
@@ -62,4 +65,5 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 - Units: g.
 - Data is not normalized.
 - Preprocessing method: continuous signal stitching.
-- Generated `splits/uci.json` using seed 0 and real subject IDs.
+
+2026-11-15 (Shreya): UCI-HAR uses the preferred stitch method (amendment 5), not the fallback. Train 7352 rows chained into 600 segments, test 2947 rows into 257. Windows never cross a gap in the overlap. Output: 8355 windows, 30 subjects. See `docs/data_cards/uci_har.md`.
