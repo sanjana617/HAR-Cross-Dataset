@@ -107,3 +107,18 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 - The top two trials were nearly tied (0.9305 and 0.9306), so the choice is preliminary.
 - Parameter count sent to Sanjana for the parity check. Against the CNN's 75,335 the ratio is about 1.02.
 - Owner: Shanaya
+
+
+2026-11-15 (Sharanya): PAMAP2-hand uses the hand IMU +/-16 g accelerometer (columns 5-7). Class map from the readme activity list (II.2): walking=4, upstairs=12, downstairs=13, sitting=2, standing=3; activity 0 and all other activities dropped. Only the Protocol folder is read; the Optional folder holds none of the 5 classes.
+
+2026-11-15 (Sharanya): PAMAP2 NaN rule: runs of up to 50 samples (0.5 s at 100 Hz) are filled by linear interpolation inside a single-activity segment; longer runs cut the segment; NaN at segment edges is trimmed. In the real data the longest run is 28 samples, so nothing is cut. Alternative considered: drop every window that contains a NaN.
+
+2026-11-15 (Sharanya): PAMAP2 subject 109 has no windows for the 5 classes (Protocol: rope jumping and transient only; Optional: TV, computer work, car driving, folding laundry, house cleaning, soccer). Usable subjects: 101-108.
+
+2026-11-16 (Sharanya): PAMAP2 split follow-up: the team agreed Sanjana's Option A for 8 usable subjects: three disjoint test sets of 3, 3 and 2 subjects covering all 8 once; train/val/test 4/1/3, 4/1/3 and 5/1/2. PROTOCOL.md still says 5/1/3 and 9 subjects; this log is the record.
+
+2026-11-16 (Sharanya): Tiny Transformer design (choices the protocol does not fix): patch size 5 (10 tokens), 2 encoder layers, learned positional encoding, mean pooling, feed-forward width 2 x d_model, GELU, pre-norm layers with a final LayerNorm. d_model is solved so the real parameter count is nearest 75,000: 2 heads d_model 66 = 73,331 parameters; 4 heads d_model 68 = 77,729 parameters. Shape, parameter-count and gradient tests pass; the overfit test is pending the shared trainer.
+
+2026-11-16 (Sharanya): Tiny Transformer tuning (UCI-HAR, split 0, seed 0, 4 configs, max 10 epochs, shared tuner): best lr 0.001, dropout 0.3, weight decay 0.0001, 4 heads; d_model 68, 77,729 parameters; validation macro-F1 0.9109 (other trials 0.8823, 0.9024, 0.8931). A rerun with the same seed reproduced the CSV and the best config exactly. The selection is preliminary: validation macro-F1 varies by up to about 4 points between epochs. Overfit test on 64 windows with the shared trainer: training accuracy 1.000. Files: results/raw/tuning_transformer.csv, configs/best/transformer.yaml, scripts/tune_transformer.py.
+
+2026-11-16 (Sharanya): Model name settled as tiny_transformer (per Sanjana). Tuning outputs renamed: results/raw/tuning_tiny_transformer.csv, configs/best/tiny_transformer.yaml, docs/tiny_transformer_tuning_summary.txt; the earlier files named transformer were removed. The rerun with the same seed reproduced the same four trials and best config (lr 0.001, dropout 0.3, weight decay 0.0001, 4 heads, d_model 68, 77,729 parameters). Best-config location: configs/best/<model>.yaml, as in the sprint plan.
