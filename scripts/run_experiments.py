@@ -1,5 +1,4 @@
-
-"""Run the fixed cross-dataset HAR experiments."""
+"""Run the fixed cross-dataset HAR experiments using saved best configs."""
 
 import argparse
 import csv
@@ -22,9 +21,12 @@ from src.data.dataloader import create_dataloaders, load_split
 from src.data.dataset import HARWindowDataset, load_har_data
 from src.data.normalization import apply_normalization
 from src.train.trainer import train_model, run_epoch
-from src.train.tuner import tune_model
 from src.train.results import write_result
 
+
+# --------------------------------------------------
+# Fixed project configuration
+# --------------------------------------------------
 
 ALIASES = {
     "uci_har": "uci",
@@ -42,6 +44,16 @@ PAMAP2_SPLIT_SIZES = [
     (5, 1, 2),
 ]
 
+BEST_CONFIG_PATHS = {
+    "cnn": "configs/cnn_best.json",
+    "tcn": "configs/tcn.yaml",
+    "tiny_transformer": "configs/best/tiny_transformer.yaml",
+}
+
+
+# --------------------------------------------------
+# Reproducibility
+# --------------------------------------------------
 
 def set_seed(seed):
     random.seed(seed)
@@ -51,6 +63,21 @@ def set_seed(seed):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
+
+def get_git_commit():
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
+# --------------------------------------------------
+# Configuration loading
+# --------------------------------------------------
 
 def load_configs(config_path):
     config_path = Path(config_path)
@@ -76,9 +103,40 @@ def get_domains(experiment):
     ]
 
 
-def validate_datasets(domains, base):
-    """Validate processed data and all three fixed subject splits."""
+def load_best_configs():
+    """Load the team's already selected best configurations."""
 
+    configs = {}
+
+    for model_name, relative_path in BEST_CONFIG_PATHS.items():
+        path = ROOT / relative_path
+
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Missing best configuration: {path}"
+            )
+
+        with open(path) as f:
+            config = yaml.safe_load(f)
+
+        required = ["learning_rate", "weight_decay"]
+
+        for key in required:
+            if key not in config:
+                raise ValueError(
+                    f"{model_name}: missing '{key}' in {relative_path}"
+                )
+
+        configs[model_name] = config
+
+    return configs
+
+
+# --------------------------------------------------
+# Dataset and split validation
+# --------------------------------------------------
+
+def validate_datasets(domains, base):
     print("\nChecking datasets and subject splits...")
 
     for domain in domains:
@@ -150,18 +208,21 @@ def validate_datasets(domains, base):
         print(f"{domain}: OK ({len(ids)} subjects)")
 
 
-def build_model(model_name, config):
-    """Build a model using its existing model factory."""
+# --------------------------------------------------
+# Model creation
+# --------------------------------------------------
 
+def build_model(model_name, config):
     config = dict(config)
 
     if model_name == "cnn":
         from src.models.cnn import build_cnn
 
         return build_cnn(
-            kernel=config.get("kernel_size", 5),
-            dropout=config.get("dropout", 0.3),
-            n_blocks=3,
+            kernel=config["kernel_size"],
+            dropout=config["dropout"],
+            n_blocks=config["n_blocks"],
+            width=config["width"],
         )
 
     if model_name == "tcn":
@@ -172,6 +233,8 @@ def build_model(model_name, config):
     if model_name == "tiny_transformer":
         from src.models.tiny_transformer import build_model
 
+        # The factory solves the width using the 75k parameter budget.
+        config["target_params"] = 75000
         return build_model(config)
 
     raise ValueError(f"Unknown model: {model_name}")
@@ -185,73 +248,30 @@ def count_params(model):
     )
 
 
-def save_tuning_results(model_name, tuning):
-    output = ROOT / "results/raw" / f"tuning_{model_name}.csv"
-    output.parent.mkdir(parents=True, exist_ok=True)
+def validate_best_configs(models, configs):
+    print("\nChecking saved model configurations...")
 
-    rows = []
-
-    for trial in tuning["trials"]:
-        rows.append({
-            "trial": trial["trial"],
-            **trial["config"],
-            "val_macro_f1": trial["val_macro_f1"],
-            "best_epoch": trial["best_epoch"],
-        })
-
-    columns = list(dict.fromkeys(
-        key for row in rows for key in row
-    ))
-
-    with open(output, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=columns)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def tune_all_models(models, base):
-    """Tune each model on UCI split 0 only."""
-
-    print("\nStarting UCI-only hyperparameter tuning...")
-
-    loaders = create_dataloaders(
-        data_path=ROOT / "data/processed/uci.npz",
-        split_path=ROOT / "splits/uci.json",
-        split_index=0,
-        batch_size=base["train"]["batch_size"],
-    )
-
-    best_configs = {}
     parameter_counts = {}
 
     for model_name in models:
-        print(f"\nTuning {model_name}...")
-        set_seed(0)
+        config = configs[model_name]
+        model = build_model(model_name, config)
 
-        tuning = tune_model(
-            model_type=model_name,
-            model_factory=lambda cfg, name=model_name: (
-                build_model(name, cfg)
-            ),
-            train_loader=loaders["train"],
-            val_loader=loaders["val"],
-            class_weights=loaders["class_weights"],
-            normalization=loaders["normalization"],
-            checkpoint_dir=(
-                ROOT / "checkpoints/tuning" / model_name
-            ),
-            seed=0,
+        actual = count_params(model)
+        expected = int(config["n_params"])
+
+        if actual != expected:
+            raise ValueError(
+                f"{model_name}: saved parameter count is {expected}, "
+                f"but built model has {actual}."
+            )
+
+        parameter_counts[model_name] = actual
+
+        print(
+            f"{model_name}: {actual:,} parameters | "
+            f"configuration verified"
         )
-
-        best_configs[model_name] = tuning["best_config"]
-
-        save_tuning_results(model_name, tuning)
-
-        model = build_model(model_name, tuning["best_config"])
-        parameter_counts[model_name] = count_params(model)
-
-        print("Best configuration:", tuning["best_config"])
-        print("Parameter count:", parameter_counts[model_name])
 
     ratio = (
         max(parameter_counts.values())
@@ -262,27 +282,47 @@ def tune_all_models(models, base):
 
     if ratio > 1.10:
         raise RuntimeError(
-            "Parameter parity failed. Maximum/minimum ratio "
-            "must be <= 1.10."
+            "Parameter parity failed: max/min must be <= 1.10."
         )
 
-    output = ROOT / "results/raw/best_configs.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
+    print("Parameter parity passed.")
 
-    with open(output, "w") as f:
-        json.dump(best_configs, f, indent=2)
-
-    return best_configs, parameter_counts
+    return parameter_counts
 
 
-def make_target_loader(domain, normalization, batch_size, base):
-    """Load all target windows using source-training normalization."""
+# --------------------------------------------------
+# Target dataset loader
+# --------------------------------------------------
+
+def make_target_loader(
+    domain, normalization, batch_size, base, split_index=0
+):
+    """Load only target test subjects using source-training normalization."""
+
+    from src.data.dataloader import load_split
 
     path = ROOT / base["data"]["processed_file"].format(
         domain=domain
     )
 
-    X, y, _ = load_har_data(path)
+    split_path = ROOT / base["data"]["splits_file"].format(
+        domain=domain
+    )
+
+    X, y, subject_id = load_har_data(path)
+    split = load_split(split_path, split_index)
+
+    test_ids = np.asarray(split["test"])
+    test_mask = np.isin(subject_id, test_ids)
+
+    if not test_mask.any():
+        raise ValueError(
+            f"No target test windows found for {domain}, "
+            f"split {split_index}."
+        )
+
+    X = X[test_mask]
+    y = y[test_mask]
 
     X = apply_normalization(
         X,
@@ -300,6 +340,10 @@ def make_target_loader(domain, normalization, batch_size, base):
     )
 
 
+# --------------------------------------------------
+# Result handling
+# --------------------------------------------------
+
 def existing_result_keys(output_path):
     if not output_path.exists():
         return set()
@@ -309,7 +353,6 @@ def existing_result_keys(output_path):
 
         return {
             (
-                row["model"],
                 row["source"],
                 row["target"],
                 row["seed"],
@@ -319,16 +362,16 @@ def existing_result_keys(output_path):
         }
 
 
-def get_git_commit():
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT,
-            text=True,
-        ).strip()
-    except Exception:
-        return "unknown"
+def save_metadata(path, metadata):
+    path.parent.mkdir(parents=True, exist_ok=True)
 
+    with open(path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+
+# --------------------------------------------------
+# Final experiments
+# --------------------------------------------------
 
 def run_final_experiments(
     models,
@@ -339,29 +382,41 @@ def run_final_experiments(
     base,
     device,
 ):
-    """Train each source model once and evaluate on all targets."""
-
     batch_size = base["train"]["batch_size"]
     max_epochs = base["train"]["max_epochs"]
     patience = base["train"]["early_stopping_patience"]
 
     for model_name in models:
-        print(f"\n{'=' * 55}")
+        print("\n" + "=" * 60)
         print(f"FINAL EXPERIMENTS: {model_name}")
-        print(f"{'=' * 55}")
+        print("=" * 60)
 
         config = best_configs[model_name]
         n_params = parameter_counts[model_name]
 
-        output_path = ROOT / "results/raw" / "results.csv"
+        # Protocol requires one results file per model.
+        output_path = (
+            ROOT / "results/raw" / f"{model_name}_results.csv"
+        )
+
         completed = existing_result_keys(output_path)
 
         for source in domains:
             for seed in seeds:
+                key_prefix = str(seed)
+
                 print(
-                    f"\nModel={model_name}, "
-                    f"Source={source}, Seed={seed}"
+                    f"\nModel={model_name} | "
+                    f"Source={source} | Seed={seed}"
                 )
+
+                all_results_exist = all(
+                    (source, target, str(seed), str(seed)) in completed
+                    for target in domains
+                )
+                if all_results_exist:
+                    print("All target results already exist. Skipping.")
+                    continue
 
                 set_seed(seed)
 
@@ -397,8 +452,8 @@ def run_final_experiments(
                     class_weights=loaders["class_weights"],
                     normalization=loaders["normalization"],
                     checkpoint_path=checkpoint,
-                    learning_rate=config["learning_rate"],
-                    weight_decay=config["weight_decay"],
+                    learning_rate=float(config["learning_rate"]),
+                    weight_decay=float(config["weight_decay"]),
                     max_epochs=max_epochs,
                     patience=patience,
                     device=device,
@@ -414,19 +469,36 @@ def run_final_experiments(
                     "split": seed,
                     "best_config": config,
                     "n_params": n_params,
+                    "best_epoch": trained["best_epoch"],
+                    "best_val_macro_f1": trained[
+                        "best_val_macro_f1"
+                    ],
                     "git_commit": get_git_commit(),
                 }
 
-                with open(
+                save_metadata(
                     checkpoint.parent
                     / f"seed_{seed}_metadata.json",
-                    "w",
-                ) as f:
-                    json.dump(metadata, f, indent=2)
+                    metadata,
+                )
 
                 criterion = nn.CrossEntropyLoss()
 
                 for target in domains:
+                    key = (
+                        source,
+                        target,
+                        str(seed),
+                        str(seed),
+                    )
+
+                    if key in completed:
+                        print(
+                            f"{source} -> {target}: "
+                            "already recorded, skipping."
+                        )
+                        continue
+
                     if target == source:
                         target_loader = loaders["test"]
                     else:
@@ -435,6 +507,7 @@ def run_final_experiments(
                             loaders["normalization"],
                             batch_size,
                             base,
+                            split_index=seed,
                         )
 
                     metrics = run_epoch(
@@ -458,27 +531,24 @@ def run_final_experiments(
                         "kappa": metrics["kappa"],
                     }
 
-                    key = (
-                        model_name,
-                        source,
-                        target,
-                        str(seed),
-                        str(seed),
-                    )
-
-                    if key not in completed:
-                        write_result(row, output_path)
-                        completed.add(key)
+                    write_result(row, output_path)
+                    completed.add(key)
 
                     print(
                         f"{source} -> {target} | "
                         f"Macro-F1: {metrics['macro_f1']:.4f}"
                     )
 
+        print(f"\nResults saved: {output_path}")
+
+
+# --------------------------------------------------
+# Main
+# --------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run cross-dataset HAR experiments."
+        description="Run fixed cross-dataset HAR experiments."
     )
 
     parser.add_argument(
@@ -494,10 +564,15 @@ def main():
     parser.add_argument(
         "--preflight-only",
         action="store_true",
-        help="Validate datasets and splits without training.",
+        help="Validate datasets, splits and model configs without training.",
     )
 
     args = parser.parse_args()
+
+    if args.device.startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA was requested, but no GPU is available."
+        )
 
     base, experiment = load_configs(args.config)
 
@@ -512,14 +587,18 @@ def main():
 
     validate_datasets(domains, base)
 
+    best_configs = load_best_configs()
+    parameter_counts = validate_best_configs(
+        models,
+        best_configs,
+    )
+
     if args.preflight_only:
         print("\nPreflight checks passed.")
         return
 
-    best_configs, parameter_counts = tune_all_models(
-        models,
-        base,
-    )
+    print("\nUsing saved best configurations.")
+    print("Hyperparameter tuning will NOT be repeated.")
 
     run_final_experiments(
         models=models,
