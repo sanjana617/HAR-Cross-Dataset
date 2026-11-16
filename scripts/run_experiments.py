@@ -19,20 +19,28 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.data.dataloader import create_dataloaders, load_split
-from src.data.dataset import load_har_data, HARWindowDataset
+from src.data.dataset import HARWindowDataset, load_har_data
 from src.data.normalization import apply_normalization
 from src.train.trainer import train_model, run_epoch
 from src.train.tuner import tune_model
 from src.train.results import write_result
 
 
-ALIASES = {"uci_har": "uci"}
+ALIASES = {
+    "uci_har": "uci",
+}
 
 EXPECTED = {
     "uci": (30, (21, 4, 5)),
     "wisdm": (36, (25, 5, 6)),
-    "pamap2_hand": (9, (5, 1, 3)),
+    "pamap2_hand": (8, None),
 }
+
+PAMAP2_SPLIT_SIZES = [
+    (4, 1, 3),
+    (4, 1, 3),
+    (5, 1, 2),
+]
 
 
 def set_seed(seed):
@@ -51,14 +59,14 @@ def load_configs(config_path):
         config_path = ROOT / config_path
 
     with open(config_path) as f:
-        experiment = yaml.safe_load(f)
+        experiment_config = yaml.safe_load(f)
 
-    base_path = config_path.parent / experiment["_base_"]
+    base_path = config_path.parent / experiment_config["_base_"]
 
     with open(base_path) as f:
         base = yaml.safe_load(f)
 
-    return base, experiment["experiment"]
+    return base, experiment_config["experiment"]
 
 
 def get_domains(experiment):
@@ -69,6 +77,8 @@ def get_domains(experiment):
 
 
 def validate_datasets(domains, base):
+    """Validate processed data and all three fixed subject splits."""
+
     print("\nChecking datasets and subject splits...")
 
     for domain in domains:
@@ -92,8 +102,8 @@ def validate_datasets(domains, base):
 
         if len(ids) != expected_count:
             raise ValueError(
-                f"{domain}: expected {expected_count} subjects "
-                f"according to PROTOCOL.md, found {len(ids)}."
+                f"{domain}: expected {expected_count} subjects, "
+                f"found {len(ids)}."
             )
 
         test_subjects = []
@@ -101,15 +111,21 @@ def validate_datasets(domains, base):
         for index in range(3):
             split = load_split(split_path, index)
 
-            train = set(split["train"])
-            val = set(split["val"])
-            test = set(split["test"])
+            train = set(int(x) for x in split["train"])
+            val = set(int(x) for x in split["val"])
+            test = set(int(x) for x in split["test"])
 
-            if (len(train), len(val), len(test)) != expected_sizes:
+            actual_sizes = (len(train), len(val), len(test))
+
+            if domain == "pamap2_hand":
+                expected_fold_sizes = PAMAP2_SPLIT_SIZES[index]
+            else:
+                expected_fold_sizes = expected_sizes
+
+            if actual_sizes != expected_fold_sizes:
                 raise ValueError(
                     f"{domain}, split {index}: expected "
-                    f"{expected_sizes}, got "
-                    f"{(len(train), len(val), len(test))}."
+                    f"{expected_fold_sizes}, got {actual_sizes}."
                 )
 
             if train & val or train & test or val & test:
@@ -125,24 +141,26 @@ def validate_datasets(domains, base):
             test_subjects.extend(test)
 
         if domain == "pamap2_hand":
-            if len(set(test_subjects)) != 9:
+            if len(set(test_subjects)) != 8:
                 raise ValueError(
-                    "PAMAP2 test subjects must be disjoint and cover "
-                    "all 9 subjects."
+                    "PAMAP2 test folds must cover all 8 subjects "
+                    "exactly once."
                 )
 
         print(f"{domain}: OK ({len(ids)} subjects)")
 
 
 def build_model(model_name, config):
+    """Build a model using its existing model factory."""
+
     config = dict(config)
 
     if model_name == "cnn":
         from src.models.cnn import build_cnn
 
         return build_cnn(
-            kernel=int(config.get("kernel_size", 5)),
-            dropout=float(config.get("dropout", 0.3)),
+            kernel=config.get("kernel_size", 5),
+            dropout=config.get("dropout", 0.3),
             n_blocks=3,
         )
 
@@ -161,9 +179,9 @@ def build_model(model_name, config):
 
 def count_params(model):
     return sum(
-        p.numel()
-        for p in model.parameters()
-        if p.requires_grad
+        parameter.numel()
+        for parameter in model.parameters()
+        if parameter.requires_grad
     )
 
 
@@ -171,41 +189,36 @@ def save_tuning_results(model_name, tuning):
     output = ROOT / "results/raw" / f"tuning_{model_name}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    columns = [
-        "trial",
-        "learning_rate",
-        "dropout",
-        "weight_decay",
-        "kernel_size",
-        "num_heads",
-        "val_macro_f1",
-        "best_epoch",
-    ]
+    rows = []
+
+    for trial in tuning["trials"]:
+        rows.append({
+            "trial": trial["trial"],
+            **trial["config"],
+            "val_macro_f1": trial["val_macro_f1"],
+            "best_epoch": trial["best_epoch"],
+        })
+
+    columns = list(dict.fromkeys(
+        key for row in rows for key in row
+    ))
 
     with open(output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
-
-        for trial in tuning["trials"]:
-            row = {
-                "trial": trial["trial"],
-                **trial["config"],
-                "val_macro_f1": trial["val_macro_f1"],
-                "best_epoch": trial["best_epoch"],
-            }
-            writer.writerow(row)
+        writer.writerows(rows)
 
 
 def tune_all_models(models, base):
-    print("\nStarting UCI-only hyperparameter tuning...")
+    """Tune each model on UCI split 0 only."""
 
-    batch_size = base["train"]["batch_size"]
+    print("\nStarting UCI-only hyperparameter tuning...")
 
     loaders = create_dataloaders(
         data_path=ROOT / "data/processed/uci.npz",
         split_path=ROOT / "splits/uci.json",
         split_index=0,
-        batch_size=batch_size,
+        batch_size=base["train"]["batch_size"],
     )
 
     best_configs = {}
@@ -213,7 +226,6 @@ def tune_all_models(models, base):
 
     for model_name in models:
         print(f"\nTuning {model_name}...")
-
         set_seed(0)
 
         tuning = tune_model(
@@ -250,8 +262,8 @@ def tune_all_models(models, base):
 
     if ratio > 1.10:
         raise RuntimeError(
-            "Model parameter parity failed. "
-            "The maximum/minimum ratio must be <= 1.10."
+            "Parameter parity failed. Maximum/minimum ratio "
+            "must be <= 1.10."
         )
 
     output = ROOT / "results/raw/best_configs.json"
@@ -264,6 +276,8 @@ def tune_all_models(models, base):
 
 
 def make_target_loader(domain, normalization, batch_size, base):
+    """Load all target windows using source-training normalization."""
+
     path = ROOT / base["data"]["processed_file"].format(
         domain=domain
     )
@@ -286,12 +300,12 @@ def make_target_loader(domain, normalization, batch_size, base):
     )
 
 
-def existing_result_keys(path):
-    if not path.exists():
+def existing_result_keys(output_path):
+    if not output_path.exists():
         return set()
 
-    with open(path, newline="") as f:
-        rows = csv.DictReader(f)
+    with open(output_path, newline="") as f:
+        reader = csv.DictReader(f)
 
         return {
             (
@@ -301,7 +315,7 @@ def existing_result_keys(path):
                 row["seed"],
                 row["split"],
             )
-            for row in rows
+            for row in reader
         }
 
 
@@ -325,6 +339,8 @@ def run_final_experiments(
     base,
     device,
 ):
+    """Train each source model once and evaluate on all targets."""
+
     batch_size = base["train"]["batch_size"]
     max_epochs = base["train"]["max_epochs"]
     patience = base["train"]["early_stopping_patience"]
@@ -337,9 +353,7 @@ def run_final_experiments(
         config = best_configs[model_name]
         n_params = parameter_counts[model_name]
 
-        output_path = (
-            ROOT / "results/raw" / f"{model_name}_results.csv"
-        )
+        output_path = ROOT / "results/raw" / "results.csv"
         completed = existing_result_keys(output_path)
 
         for source in domains:
@@ -393,8 +407,6 @@ def run_final_experiments(
                 model = trained["model"]
                 model.eval()
 
-                criterion = nn.CrossEntropyLoss()
-
                 metadata = {
                     "model": model_name,
                     "source": source,
@@ -406,10 +418,13 @@ def run_final_experiments(
                 }
 
                 with open(
-                    checkpoint.parent / f"seed_{seed}_metadata.json",
+                    checkpoint.parent
+                    / f"seed_{seed}_metadata.json",
                     "w",
                 ) as f:
                     json.dump(metadata, f, indent=2)
+
+                criterion = nn.CrossEntropyLoss()
 
                 for target in domains:
                     if target == source:
@@ -426,7 +441,7 @@ def run_final_experiments(
                         model=model,
                         loader=target_loader,
                         criterion=criterion,
-                        device=torch.device(device),
+                        device=device,
                     )
 
                     row = {
@@ -479,7 +494,7 @@ def main():
     parser.add_argument(
         "--preflight-only",
         action="store_true",
-        help="Check data and splits without training.",
+        help="Validate datasets and splits without training.",
     )
 
     args = parser.parse_args()
