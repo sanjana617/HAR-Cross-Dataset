@@ -1,7 +1,7 @@
 """Run the four-trial UCI-only Tiny Transformer hyperparameter tuning (PROTOCOL.md section 2).
 Same pattern as scripts/tune_tcn.py and tune_cnn_uci.py. Run from the repo root:
 
-    PYTHONPATH=. python scripts/tune_transformer.py | tee docs/transformer_tuning_summary.txt
+    PYTHONPATH=. python scripts/tune_transformer.py | tee docs/tiny_transformer_tuning_summary.txt
 
 Needs: data/processed/uci.npz, splits/uci.json, src/models/tiny_transformer.py
 Uses the shared tuner (src/train/tuner.py): 4 random configs, UCI-HAR only, split 0, seed 0, max 10 epochs,
@@ -21,7 +21,7 @@ from src.data.dataloader import create_dataloaders
 from src.models.tiny_transformer import build_model, count_params
 from src.train.tuner import tune_model
 
-MODEL_NAME = "transformer"        # used in file names and the CSV; change here if the team settles on "tiny_transformer"
+MODEL_NAME = "tiny_transformer"    # team decision: used in file names and the CSV
 SEED = 0
 SPLIT_INDEX = 0
 

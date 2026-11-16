@@ -1,4 +1,4 @@
-git commit: 7ffd1572ca708e3ddb7fc126b6b9ce3201eb42f8
+git commit: ea2378e620297bc6618be2b853247a81c0330443
 device: cpu  torch 2.4.1+cpu  numpy 1.26.4  python 3.12.3
 Loading UCI data and split 0...
 Starting four Tiny Transformer tuning trials...
@@ -64,5 +64,5 @@ UCI Tiny Transformer tuning completed.
 Best configuration: {'learning_rate': 0.001, 'dropout': 0.3, 'weight_decay': 0.0001, 'num_heads': 4}
 Best validation macro-F1: 0.9109254706937646
 Best model: d_model 68, 77729 parameters (send this to Sanjana)
-Tuning CSV saved to: results/raw/tuning_transformer.csv
-Best config saved to: configs/best/transformer.yaml
+Tuning CSV saved to: results/raw/tuning_tiny_transformer.csv
+Best config saved to: configs/best/tiny_transformer.yaml
