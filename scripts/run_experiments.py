@@ -1,4 +1,5 @@
-"""Run the fixed cross-dataset HAR experiments using saved best configs."""
+
+"""Run fixed cross-dataset HAR experiments using saved best configs."""
 
 import argparse
 import csv
@@ -24,13 +25,7 @@ from src.train.trainer import train_model, run_epoch
 from src.train.results import write_result
 
 
-# --------------------------------------------------
-# Fixed project configuration
-# --------------------------------------------------
-
-ALIASES = {
-    "uci_har": "uci",
-}
+ALIASES = {"uci_har": "uci"}
 
 EXPECTED = {
     "uci": (30, (21, 4, 5)),
@@ -51,9 +46,11 @@ BEST_CONFIG_PATHS = {
 }
 
 
-# --------------------------------------------------
-# Reproducibility
-# --------------------------------------------------
+def resolve_path(path):
+    """Resolve relative output paths against the project root."""
+    path = Path(path)
+    return path if path.is_absolute() else ROOT / path
+
 
 def set_seed(seed):
     random.seed(seed)
@@ -75,15 +72,8 @@ def get_git_commit():
         return "unknown"
 
 
-# --------------------------------------------------
-# Configuration loading
-# --------------------------------------------------
-
 def load_configs(config_path):
-    config_path = Path(config_path)
-
-    if not config_path.is_absolute():
-        config_path = ROOT / config_path
+    config_path = resolve_path(config_path)
 
     with open(config_path) as f:
         experiment_config = yaml.safe_load(f)
@@ -104,8 +94,6 @@ def get_domains(experiment):
 
 
 def load_best_configs():
-    """Load the team's already selected best configurations."""
-
     configs = {}
 
     for model_name, relative_path in BEST_CONFIG_PATHS.items():
@@ -119,9 +107,7 @@ def load_best_configs():
         with open(path) as f:
             config = yaml.safe_load(f)
 
-        required = ["learning_rate", "weight_decay"]
-
-        for key in required:
+        for key in ("learning_rate", "weight_decay"):
             if key not in config:
                 raise ValueError(
                     f"{model_name}: missing '{key}' in {relative_path}"
@@ -131,10 +117,6 @@ def load_best_configs():
 
     return configs
 
-
-# --------------------------------------------------
-# Dataset and split validation
-# --------------------------------------------------
 
 def validate_datasets(domains, base):
     print("\nChecking datasets and subject splits...")
@@ -175,10 +157,11 @@ def validate_datasets(domains, base):
 
             actual_sizes = (len(train), len(val), len(test))
 
-            if domain == "pamap2_hand":
-                expected_fold_sizes = PAMAP2_SPLIT_SIZES[index]
-            else:
-                expected_fold_sizes = expected_sizes
+            expected_fold_sizes = (
+                PAMAP2_SPLIT_SIZES[index]
+                if domain == "pamap2_hand"
+                else expected_sizes
+            )
 
             if actual_sizes != expected_fold_sizes:
                 raise ValueError(
@@ -208,10 +191,6 @@ def validate_datasets(domains, base):
         print(f"{domain}: OK ({len(ids)} subjects)")
 
 
-# --------------------------------------------------
-# Model creation
-# --------------------------------------------------
-
 def build_model(model_name, config):
     config = dict(config)
 
@@ -233,7 +212,6 @@ def build_model(model_name, config):
     if model_name == "tiny_transformer":
         from src.models.tiny_transformer import build_model
 
-        # The factory solves the width using the 75k parameter budget.
         config["target_params"] = 75000
         return build_model(config)
 
@@ -270,7 +248,7 @@ def validate_best_configs(models, configs):
 
         print(
             f"{model_name}: {actual:,} parameters | "
-            f"configuration verified"
+            "configuration verified"
         )
 
     ratio = (
@@ -286,25 +264,17 @@ def validate_best_configs(models, configs):
         )
 
     print("Parameter parity passed.")
-
     return parameter_counts
 
-
-# --------------------------------------------------
-# Target dataset loader
-# --------------------------------------------------
 
 def make_target_loader(
     domain, normalization, batch_size, base, split_index=0
 ):
-    """Load only target test subjects using source-training normalization."""
-
-    from src.data.dataloader import load_split
+    """Load target test subjects using source-training normalization."""
 
     path = ROOT / base["data"]["processed_file"].format(
         domain=domain
     )
-
     split_path = ROOT / base["data"]["splits_file"].format(
         domain=domain
     )
@@ -340,10 +310,6 @@ def make_target_loader(
     )
 
 
-# --------------------------------------------------
-# Result handling
-# --------------------------------------------------
-
 def existing_result_keys(output_path):
     if not output_path.exists():
         return set()
@@ -369,10 +335,6 @@ def save_metadata(path, metadata):
         json.dump(metadata, f, indent=2)
 
 
-# --------------------------------------------------
-# Final experiments
-# --------------------------------------------------
-
 def run_final_experiments(
     models,
     domains,
@@ -381,30 +343,31 @@ def run_final_experiments(
     parameter_counts,
     base,
     device,
+    results_dir,
+    checkpoints_dir,
+    max_epochs=None,
 ):
     batch_size = base["train"]["batch_size"]
-    max_epochs = base["train"]["max_epochs"]
     patience = base["train"]["early_stopping_patience"]
+    epochs = max_epochs or base["train"]["max_epochs"]
 
     for model_name in models:
         print("\n" + "=" * 60)
-        print(f"FINAL EXPERIMENTS: {model_name}")
+        print(f"EXPERIMENTS: {model_name}")
         print("=" * 60)
 
         config = best_configs[model_name]
         n_params = parameter_counts[model_name]
 
-        # Protocol requires one results file per model.
         output_path = (
-            ROOT / "results/raw" / f"{model_name}_results.csv"
+            results_dir / "raw" / f"{model_name}_results.csv"
         )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         completed = existing_result_keys(output_path)
 
         for source in domains:
             for seed in seeds:
-                key_prefix = str(seed)
-
                 print(
                     f"\nModel={model_name} | "
                     f"Source={source} | Seed={seed}"
@@ -414,6 +377,7 @@ def run_final_experiments(
                     (source, target, str(seed), str(seed)) in completed
                     for target in domains
                 )
+
                 if all_results_exist:
                     print("All target results already exist. Skipping.")
                     continue
@@ -438,8 +402,8 @@ def run_final_experiments(
                 model = build_model(model_name, config)
 
                 checkpoint = (
-                    ROOT
-                    / "checkpoints/final"
+                    checkpoints_dir
+                    / "final"
                     / model_name
                     / source
                     / f"seed_{seed}.pt"
@@ -454,7 +418,7 @@ def run_final_experiments(
                     checkpoint_path=checkpoint,
                     learning_rate=float(config["learning_rate"]),
                     weight_decay=float(config["weight_decay"]),
-                    max_epochs=max_epochs,
+                    max_epochs=epochs,
                     patience=patience,
                     device=device,
                 )
@@ -542,10 +506,6 @@ def run_final_experiments(
         print(f"\nResults saved: {output_path}")
 
 
-# --------------------------------------------------
-# Main
-# --------------------------------------------------
-
 def main():
     parser = argparse.ArgumentParser(
         description="Run fixed cross-dataset HAR experiments."
@@ -555,16 +515,51 @@ def main():
         "--config",
         default="configs/exp_cross_dataset.yaml",
     )
-
     parser.add_argument(
         "--device",
         default="cuda" if torch.cuda.is_available() else "cpu",
     )
-
     parser.add_argument(
         "--preflight-only",
         action="store_true",
         help="Validate datasets, splits and model configs without training.",
+    )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        choices=list(BEST_CONFIG_PATHS),
+        default=None,
+        help="Optional subset of models to run.",
+    )
+    parser.add_argument(
+        "--domains",
+        nargs="+",
+        choices=list(EXPECTED),
+        default=None,
+        help="Optional subset of domains to run.",
+    )
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Optional subset of split/seed indices (0, 1, 2).",
+    )
+    parser.add_argument(
+        "--results-dir",
+        default="results",
+        help="Results root directory. Relative paths are under the project root.",
+    )
+    parser.add_argument(
+        "--checkpoints-dir",
+        default="checkpoints",
+        help="Checkpoint root directory. Relative paths are under the project root.",
+    )
+    parser.add_argument(
+        "--max-epochs",
+        type=int,
+        default=None,
+        help="Optional epoch limit for smoke tests.",
     )
 
     args = parser.parse_args()
@@ -574,20 +569,47 @@ def main():
             "CUDA was requested, but no GPU is available."
         )
 
+    if args.max_epochs is not None and args.max_epochs < 1:
+        raise ValueError("--max-epochs must be at least 1.")
+
     base, experiment = load_configs(args.config)
 
-    domains = get_domains(experiment)
-    models = experiment["models"]
-    seeds = base["final"]["seeds"]
+    configured_domains = get_domains(experiment)
+    configured_models = experiment["models"]
+    configured_seeds = base["final"]["seeds"]
+
+    domains = args.domains or configured_domains
+    models = args.models or configured_models
+    seeds = args.seeds or configured_seeds
+
+    if any(seed not in (0, 1, 2) for seed in seeds):
+        raise ValueError("Seeds/split indices must be 0, 1, or 2.")
+
+    if not set(domains).issubset(configured_domains):
+        raise ValueError("Requested domains are not in the experiment config.")
+
+    if not set(models).issubset(configured_models):
+        raise ValueError("Requested models are not in the experiment config.")
+
+    results_dir = resolve_path(args.results_dir)
+    checkpoints_dir = resolve_path(args.checkpoints_dir)
 
     print("Domains:", domains)
     print("Models:", models)
     print("Seeds:", seeds)
     print("Device:", args.device)
+    print("Results directory:", results_dir)
+    print("Checkpoints directory:", checkpoints_dir)
+    print("Epoch limit:", args.max_epochs or "config default")
 
     validate_datasets(domains, base)
 
-    best_configs = load_best_configs()
+    all_best_configs = load_best_configs()
+    best_configs = {
+        model: all_best_configs[model]
+        for model in models
+    }
+
     parameter_counts = validate_best_configs(
         models,
         best_configs,
@@ -608,6 +630,9 @@ def main():
         parameter_counts=parameter_counts,
         base=base,
         device=args.device,
+        results_dir=results_dir,
+        checkpoints_dir=checkpoints_dir,
+        max_epochs=args.max_epochs,
     )
 
     print("\nAll experiments completed.")
