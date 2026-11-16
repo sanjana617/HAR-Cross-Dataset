@@ -87,6 +87,7 @@ Source of truth: `PROTOCOL.md` (tag: protocol-v1-sprint).
 - README tuning numbers (8 configs, 15 epochs) were stale. PROTOCOL.md (4 configs, UCI only, 10 epochs) is the source of truth, and the README now points to it. No protocol change.
 
 2026-11-16 (Shreya): .gitignore line `results/raw/*` was blocking result CSVs. Added `!results/raw/*.csv`, since PROTOCOL.md requires results CSVs in the repo. Other files in results/raw/ remain ignored.
+2026-11-16 (Shreya): .gitignore: allow results/tables/*.csv, since the protocol requires result CSVs in the repo.
 
 ## WISDM pipeline decisions (Shanaya)
 
