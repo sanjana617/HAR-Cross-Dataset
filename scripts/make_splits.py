@@ -1,4 +1,4 @@
-
+```python
 """Make fixed subject-wise splits for each HAR dataset."""
 
 import argparse
@@ -14,32 +14,6 @@ SIZES = {
     "uci": (21, 4, 5),
     "wisdm": (25, 5, 6),
     "pamap2_hand": (None, None, None),
-SIZES = {
-    "uci": (21, 4, 5),
-    "wisdm": (25, 5, 6),
-    "pamap2_hand": (None, None, None),
-}
-
-PAMAP2_SPLITS = [
-    {
-        "split": 0,
-        "train": [102, 106, 107, 108],
-        "val": [101],
-        "test": [103, 104, 105],
-    },
-    {
-        "split": 1,
-        "train": [102, 103, 104, 105],
-        "val": [108],
-        "test": [101, 106, 107],
-    },
-    {
-        "split": 2,
-        "train": [101, 103, 104, 106, 107],
-        "val": [105],
-        "test": [102, 108],
-    },
-]
 }
 
 PAMAP2_SPLITS = [
@@ -154,3 +128,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
